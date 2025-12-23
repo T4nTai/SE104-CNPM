@@ -12,6 +12,7 @@ services:
     command: >
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
+      --lower_case_table_names=1
     volumes:
       - db_data:/var/lib/mysql
       - ./Backend/Database.sql:/docker-entrypoint-initdb.d/init.sql:ro
