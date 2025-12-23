@@ -18,8 +18,8 @@ RUN npm run build
 
 # 2) Serve stage
 FROM nginx:1.27-alpine
-# Copy built assets
-COPY --from=build /app/dist /usr/share/nginx/html
+# Copy built assets (Vite outDir is set to "build" in vite.config.ts)
+COPY --from=build /app/build /usr/share/nginx/html
 
 # Add nginx config with /api proxy to backend service
 COPY nginx.conf /etc/nginx/conf.d/default.conf
