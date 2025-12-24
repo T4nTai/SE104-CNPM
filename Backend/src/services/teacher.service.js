@@ -279,6 +279,26 @@ export class TeacherService {
       const lop = await Lop.findByPk(MaLop, { transaction: t });
       if (lop?.MaNamHoc) {
         const ts = await ThamSo.findOne({ where: { MaNamHoc: lop.MaNamHoc }, transaction: t });
+        
+        // Validate age (tuổi)
+        if (NgaySinh && (ts?.Tuoi_Toi_Thieu != null || ts?.Tuoi_Toi_Da != null)) {
+          const today = new Date();
+          const birthDate = new Date(NgaySinh);
+          let age = today.getFullYear() - birthDate.getFullYear();
+          const monthDiff = today.getMonth() - birthDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          
+          if (ts?.Tuoi_Toi_Thieu != null && age < ts.Tuoi_Toi_Thieu) {
+            throw { status: 400, message: `Tuổi học sinh (${age}) phải >= ${ts.Tuoi_Toi_Thieu}` };
+          }
+          if (ts?.Tuoi_Toi_Da != null && age > ts.Tuoi_Toi_Da) {
+            throw { status: 400, message: `Tuổi học sinh (${age}) phải <= ${ts.Tuoi_Toi_Da}` };
+          }
+        }
+        
+        // Validate class size (sĩ số)
         if (ts?.Si_So_Toi_Da) {
           const current = await HocSinhLop.count({ where: { MaLop, MaHocKy }, transaction: t });
           if (current + 1 > ts.Si_So_Toi_Da) throw { status: 400, message: "Vượt sĩ số tối đa của lớp" };
@@ -378,11 +398,34 @@ export class TeacherService {
       let bdm = await BangDiemMon.findOne({ where: { MaLop, MaHocKy, MaMon }, transaction: t });
       if (!bdm) bdm = await BangDiemMon.create({ MaLop, MaHocKy, MaMon }, { transaction: t });
 
-      // 2) preload weights
+      // 2) preload weights from LHKT
       const lhktList = await LoaiHinhKiemTra.findAll({ transaction: t });
       const weightMap = new Map(lhktList.map(x => [x.MaLHKT, Number(x.HeSo)]));
 
-      // 3) upsert each student
+      // 3) preload THAMSO weights (category weights: mieng, 15p, 1tiet, giuaky, cuoiky)
+      const lop = await Lop.findByPk(MaLop, { transaction: t });
+      let thamSo = null;
+      if (lop?.MaNamHoc) {
+        thamSo = await ThamSo.findOne({ where: { MaNamHoc: lop.MaNamHoc }, transaction: t });
+      }
+      
+      // helper: classify LHKT into category
+      const classify = (ma, ten) => {
+        const name = (ten || '').toLowerCase();
+        if (name.includes('miệng') || name.includes('mieng')) return 'mieng';
+        if (name.includes('15')) return '15p';
+        if (name.includes('1 tiết') || name.includes('1t') || name.includes('tiết')) return '1tiet';
+        if (name.includes('giữa') || name.includes('giuaki')) return 'giuaky';
+        if (name.includes('cuối') || name.includes('cuoiki')) return 'cuoiky';
+        if (Number(ma) === 1) return 'mieng';
+        if (Number(ma) === 2) return '15p';
+        if (Number(ma) === 3) return '1tiet';
+        if (Number(ma) === 4) return 'giuaky';
+        if (Number(ma) === 5) return 'cuoiky';
+        return null;
+      };
+
+      // 4) upsert each student
       for (const s of scores) {
         const MaHocSinh = s.MaHocSinh;
         if (MaHocSinh == null) continue;
@@ -398,7 +441,7 @@ export class TeacherService {
           );
         }
 
-        // 4) upsert detail scores
+        // 5) upsert detail scores
         const details = Array.isArray(s.details) ? s.details : [];
         for (const d of details) {
           if (d.MaLHKT == null || d.Lan == null) continue;
@@ -417,24 +460,73 @@ export class TeacherService {
           }
         }
 
-        // 5) compute DiemTBMon (weighted)
+        // 6) compute DiemTBMon (weighted by LHKT, then by category if THAMSO weights exist)
         const all = await CTBangDiemMonLHKT.findAll({
           where: { MaCTBangDiemMon: ct.MaCTBangDiemMon },
           transaction: t,
         });
 
-        let sum = 0, wsum = 0;
-        for (const r of all) {
-          const w = weightMap.get(r.MaLHKT) ?? 1;
-          if (r.Diem == null) continue;
-          sum += Number(r.Diem) * w;
-          wsum += w;
+        // If THAMSO has category weights, compute by category first, then apply category weights
+        if (thamSo && (thamSo.Heso_Mieng || thamSo.Heso_Chinh_15p || thamSo.Heso_Giua_ky || thamSo.Heso_Cuoi_ky)) {
+          const categoryScores = {
+            mieng: { sum: 0, wsum: 0 },
+            '15p': { sum: 0, wsum: 0 },
+            '1tiet': { sum: 0, wsum: 0 },
+            giuaky: { sum: 0, wsum: 0 },
+            cuoiky: { sum: 0, wsum: 0 },
+          };
+
+          for (const r of all) {
+            const w = weightMap.get(r.MaLHKT) ?? 1;
+            if (r.Diem == null) continue;
+
+            const lhkt = lhktList.find(x => x.MaLHKT === r.MaLHKT);
+            const cat = classify(r.MaLHKT, lhkt?.TenLHKT);
+            if (cat && categoryScores[cat]) {
+              categoryScores[cat].sum += Number(r.Diem) * w;
+              categoryScores[cat].wsum += w;
+            }
+          }
+
+          // Calculate category averages
+          const catAvgs = {};
+          for (const [cat, data] of Object.entries(categoryScores)) {
+            catAvgs[cat] = data.wsum > 0 ? Number((data.sum / data.wsum).toFixed(2)) : null;
+          }
+
+          // Apply category weights from THAMSO
+          const hesoMap = {
+            mieng: thamSo.Heso_Mieng ?? 0,
+            '15p': thamSo.Heso_Chinh_15p ?? 0,
+            '1tiet': 0, // not usually weighted separately
+            giuaky: thamSo.Heso_Giua_ky ?? 0,
+            cuoiky: thamSo.Heso_Cuoi_ky ?? 0,
+          };
+
+          let totalSum = 0, totalWsum = 0;
+          for (const [cat, avg] of Object.entries(catAvgs)) {
+            if (avg != null) {
+              totalSum += avg * hesoMap[cat];
+              totalWsum += hesoMap[cat];
+            }
+          }
+          const DiemTBMon = totalWsum > 0 ? Number((totalSum / totalWsum).toFixed(2)) : null;
+          await ct.update({ DiemTBMon }, { transaction: t });
+        } else {
+          // Default: weight by LHKT only
+          let sum = 0, wsum = 0;
+          for (const r of all) {
+            const w = weightMap.get(r.MaLHKT) ?? 1;
+            if (r.Diem == null) continue;
+            sum += Number(r.Diem) * w;
+            wsum += w;
+          }
+          const DiemTBMon = wsum > 0 ? Number((sum / wsum).toFixed(2)) : null;
+          await ct.update({ DiemTBMon }, { transaction: t });
         }
-        const DiemTBMon = wsum > 0 ? Number((sum / wsum).toFixed(2)) : null;
-        await ct.update({ DiemTBMon }, { transaction: t });
       }
 
-      // 6) cập nhật DiemTBHK cho từng học sinh trong lớp/học kỳ (gộp theo hệ số môn)
+      // 7) cập nhật DiemTBHK cho từng học sinh trong lớp/học kỳ (gộp theo hệ số môn)
       await this.recalculateSemesterAverages({ MaLop, MaHocKy }, t);
 
       return { ok: true, MaBangDiemMon: bdm.MaBangDiemMon };

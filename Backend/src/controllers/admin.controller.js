@@ -406,8 +406,12 @@ export class AdminController {
   static async importNguoiDung(req, res, next) {
     try {
       if (!req.file) throw { status: 400, message: "Vui lòng chọn file CSV/XLSX" };
+
+      // Cho phép bật gửi email thủ công qua query để tránh timeout khi import khối lượng lớn
+      const forceSendEmail = String(req.query.sendEmail || "false").toLowerCase() === "true";
+
       const rows = parseSpreadsheet(req.file.buffer);
-      const result = await AdminService.importNguoiDungFromRows(rows);
+      const result = await AdminService.importNguoiDungFromRows(rows, { sendEmail: forceSendEmail });
       res.status(201).json({ data: result });
     } catch (e) { next(e); }
   }

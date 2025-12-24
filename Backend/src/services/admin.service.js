@@ -55,14 +55,22 @@ function mapThamSoPayload(payload = {}) {
 
     DiemDatMon: payload.diemDatToiThieu ?? payload.DiemDatMon ?? null,
     DiemDat: payload.diemToiThieuHocKy ?? payload.DiemDat ?? null,
+
+    HesoMieng: payload.gradeWeight?.oral ?? payload.HesoMieng ?? null,
+    HesoChinh15p: payload.gradeWeight?.main15p ?? payload.HesoChinh15p ?? null,
+    HesoGiuaky: payload.gradeWeight?.midterm ?? payload.HesoGiuaky ?? null,
+    HesoCuoiky: payload.gradeWeight?.final ?? payload.HesoCuoiky ?? null,
   };
 }
 
 function validateThamSo(data) {
   const isIntOrNull = (v) =>
     v == null || (Number.isInteger(v) && Number.isFinite(v));
+  
+  const isDecimalOrNull = (v) =>
+    v == null || (typeof v === 'number' && isFinite(v));
 
-  // int check
+  // int check for traditional parameters
   for (const k of [
     "TuoiToiThieu",
     "TuoiToiDa",
@@ -74,6 +82,26 @@ function validateThamSo(data) {
   ]) {
     if (!isIntOrNull(data[k])) {
       throw { status: 400, message: `${k} phải là số nguyên (hoặc null)` };
+    }
+  }
+
+  // decimal check for grade weights (must be between 0 and 100)
+  for (const k of ["HesoMieng", "HesoChinh15p", "HesoGiuaky", "HesoCuoiky"]) {
+    if (!isDecimalOrNull(data[k])) {
+      throw { status: 400, message: `${k} phải là số thập phân (hoặc null)` };
+    }
+    if (data[k] != null && (data[k] < 0 || data[k] > 100)) {
+      throw { status: 400, message: `${k} phải trong khoảng [0..100]` };
+    }
+  }
+
+  // Check that grade weights sum to 100 if any are provided
+  const weights = [data.HesoMieng, data.HesoChinh15p, data.HesoGiuaky, data.HesoCuoiky];
+  const hasAnyWeight = weights.some(w => w != null);
+  if (hasAnyWeight) {
+    const sum = weights.reduce((a, b) => (a ?? 0) + (b ?? 0), 0);
+    if (Math.abs(sum - 100) > 0.01) {  // allow small floating point errors
+      throw { status: 400, message: `Tổng của các hệ số trọng số phải bằng 100 (hiện tại: ${sum.toFixed(2)})` };
     }
   }
 
@@ -449,6 +477,12 @@ export class AdminService {
       throw { status: 400, message: "Không thể gán học sinh làm giáo viên chủ nhiệm" };
     }
 
+    // Mỗi giáo viên chỉ được làm GVCN của tối đa một lớp
+    const existingHomeroom = await Lop.findOne({ where: { MaGVCN: Number(MaGVCN) } });
+    if (existingHomeroom && existingHomeroom.MaLop !== Number(MaLop)) {
+      throw { status: 400, message: "Giáo viên này đã là GVCN của một lớp khác" };
+    }
+
     await lop.update({ MaGVCN: Number(MaGVCN) });
     return await Lop.findByPk(Number(MaLop), {
       include: [{ model: NguoiDung, as: "GVCN", required: false, attributes: ["MaNguoiDung", "HoVaTen", "Email"] }],
@@ -796,7 +830,7 @@ export class AdminService {
     return { success: true, message: "Mật khẩu đã được đặt lại" };
   }
 
-  static async importNguoiDungFromRows(rows = []) {
+  static async importNguoiDungFromRows(rows = [], { sendEmail = false } = {}) {
     if (!Array.isArray(rows) || rows.length === 0) {
       throw { status: 400, message: "File không có dữ liệu" };
     }
@@ -810,10 +844,13 @@ export class AdminService {
     });
 
     const errors = [];
-    let imported = 0;
+    const candidates = [];
+    const usernamesInFile = new Set();
 
+    // Bước 1: Chuẩn hóa & kiểm tra đầu vào, gom dữ liệu hợp lệ trước khi hit DB
     for (let idx = 0; idx < rows.length; idx += 1) {
       const row = rows[idx] || {};
+      const rowNumber = idx + 2; // assuming row 1 is header
 
       const TenDangNhap = pickField(row, ["Tên đăng nhập", "TenDangNhap", "Username", "user", "TaiKhoan", "Account", "username"]);
       const MatKhau = pickField(row, ["Mật khẩu", "MatKhau", "Password", "Mat khau", "Pass"]);
@@ -821,7 +858,19 @@ export class AdminService {
       const Email = pickField(row, ["Email", "Mail", "DiaChiEmail"]);
       const MaNhomNguoiDungRaw = pickField(row, ["MaNhomNguoiDung", "MaNhom", "GroupId"]);
       const TenNhomNguoiDungField = pickField(row, ["Nhóm người dùng", "TenNhomNguoiDung", "Nhom", "Role", "GroupName"]);
-      const sendEmail = normalizeBoolean(pickField(row, ["Gửi thông tin đăng nhập qua email", "GuiEmail", "SendEmail", "Email?", "send_email"]), true);
+      const sendEmailRow = normalizeBoolean(pickField(row, ["Gửi thông tin đăng nhập qua email", "GuiEmail", "SendEmail", "Email?", "send_email"]), true);
+
+      if (!TenDangNhap || !MatKhau || !HoVaTen || !Email) {
+        errors.push({ row: rowNumber, message: "Thiếu Tên đăng nhập/Mật khẩu/Họ và tên/Email" });
+        continue;
+      }
+
+      // Kiểm tra trùng username trong chính file import để tránh vòng lặp DB dư thừa
+      if (usernamesInFile.has(TenDangNhap)) {
+        errors.push({ row: rowNumber, message: "Trùng Tên đăng nhập trong file" });
+        continue;
+      }
+      usernamesInFile.add(TenDangNhap);
 
       let MaNhomNguoiDung = null;
       if (MaNhomNguoiDungRaw != null && !Number.isNaN(Number(MaNhomNguoiDungRaw))) {
@@ -833,36 +882,107 @@ export class AdminService {
         MaNhomNguoiDung = defaultTeacherGroup.MaNhomNguoiDung;
       }
 
-      const rowNumber = idx + 2; // assuming row 1 is header
-
-      if (!TenDangNhap || !MatKhau || !HoVaTen || !Email) {
-        errors.push({ row: rowNumber, message: "Thiếu Tên đăng nhập/Mật khẩu/Họ và tên/Email" });
-        continue;
-      }
       if (!MaNhomNguoiDung || !groupById.has(MaNhomNguoiDung)) {
         errors.push({ row: rowNumber, message: "Không tìm thấy nhóm người dùng hợp lệ" });
         continue;
       }
 
-      try {
-        await this.createNguoiDung({
-          TenDangNhap,
-          MatKhau,
-          HoVaTen,
-          Email,
-          MaNhomNguoiDung,
-          sendEmail,
-        });
-        imported += 1;
-      } catch (err) {
-        const message = err?.message || err?.msg || "Lỗi không xác định";
-        errors.push({ row: rowNumber, message });
+      candidates.push({
+        rowNumber,
+        TenDangNhap,
+        MatKhau,
+        HoVaTen,
+        Email,
+        MaNhomNguoiDung,
+        sendEmail: sendEmail && sendEmailRow, // chỉ gửi email nếu bật query sendEmail
+      });
+    }
+
+    if (candidates.length === 0) {
+      return { total: rows.length, imported: 0, failed: errors.length, errors };
+    }
+
+    // Bước 2: Kiểm tra trùng username trong DB một lần
+    const existedUsers = await NguoiDung.findAll({
+      where: { TenDangNhap: { [Op.in]: Array.from(usernamesInFile) } },
+      attributes: ["TenDangNhap"],
+    });
+    const existedSet = new Set(existedUsers.map((u) => u.TenDangNhap));
+
+    const rowsToCreate = [];
+    for (const c of candidates) {
+      if (existedSet.has(c.TenDangNhap)) {
+        errors.push({ row: c.rowNumber, message: "Tên đăng nhập đã tồn tại" });
+        continue;
       }
+      rowsToCreate.push(c);
+    }
+
+    if (rowsToCreate.length === 0) {
+      return { total: rows.length, imported: 0, failed: errors.length, errors };
+    }
+
+    // Bước 3: Hash password song song có giới hạn để tránh nghẽn CPU
+    const MAX_CONCURRENCY = 8;
+    const queue = [...rowsToCreate];
+    const hashedPayloads = [];
+
+    const workers = Array.from({ length: Math.min(MAX_CONCURRENCY, queue.length) }, async () => {
+      while (queue.length) {
+        const item = queue.pop();
+        if (!item) break;
+        const hashed = await bcrypt.hash(item.MatKhau, 10);
+        hashedPayloads.push({
+          TenDangNhap: item.TenDangNhap,
+          MatKhau: hashed,
+          HoVaTen: item.HoVaTen,
+          Email: item.Email,
+          MaNhomNguoiDung: item.MaNhomNguoiDung,
+          MaHocSinh: null,
+          sendEmail: item.sendEmail,
+          rowNumber: item.rowNumber,
+        });
+      }
+    });
+    await Promise.all(workers);
+
+    // Bước 4: Bulk create trong 1 transaction để giảm round-trip
+    await sequelize.transaction(async (t) => {
+      await NguoiDung.bulkCreate(
+        hashedPayloads.map((p) => ({
+          TenDangNhap: p.TenDangNhap,
+          MatKhau: p.MatKhau,
+          HoVaTen: p.HoVaTen,
+          Email: p.Email,
+          MaNhomNguoiDung: p.MaNhomNguoiDung,
+          MaHocSinh: null,
+        })),
+        { transaction: t }
+      );
+    });
+
+    // Bước 5: (Tuỳ chọn) Gửi email sau cùng, không block kết quả import
+    if (hashedPayloads.some((p) => p.sendEmail)) {
+      // không await để tránh timeout, log lỗi nếu có
+      Promise.allSettled(
+        hashedPayloads
+          .filter((p) => p.sendEmail)
+          .map((p) =>
+            sendAccountCreationEmail({
+              email: p.Email,
+              username: p.TenDangNhap,
+              password: "(đã được đặt trong hệ thống)",
+              name: p.HoVaTen,
+            })
+          )
+      ).catch((err) => {
+        console.error("Send email after import failed", err);
+      });
     }
 
     return {
       total: rows.length,
-      imported,
+      imported: rowsToCreate.length,
       failed: errors.length,
       errors,
     };
