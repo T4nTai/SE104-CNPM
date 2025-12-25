@@ -24,8 +24,10 @@ interface GradeEntry {
 }
 
 export function GradeEntry({ teacherId }: { teacherId: number | null }) {
+  console.log('[GradeEntry] Component mounted with teacherId:', teacherId);
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
+  const [teacherSubjects, setTeacherSubjects] = useState<string[]>([]); // Store MaMon of teacher's subjects
   const [testTypes, setTestTypes] = useState<any[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -37,30 +39,94 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
   const [saving, setSavingStatus] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [thamSo, setThamSo] = useState<any>(null);
+  const [allSubjectsGrades, setAllSubjectsGrades] = useState<Map<string, Map<string, any>>>(
+    new Map<string, Map<string, any>>()
+  );
+
+  // Check if teacher can edit - only if they teach this subject
+  const canEditCurrentSubject = (): boolean => {
+    if (!selectedSubject) return false;
+    const canEdit = teacherSubjects.includes(selectedSubject);
+    console.log('canEditCurrentSubject check:', {
+      selectedSubject,
+      teacherSubjects,
+      result: canEdit
+    });
+    return canEdit;
+  };
+
+  // Only show subjects that teacher teaches
+  const getVisibleSubjects = (): any[] => {
+    const visible = subjects.filter((subject) => {
+      const subjectId = String(subject.MaMonHoc);
+      return teacherSubjects.includes(subjectId);
+    });
+    console.log('[getVisibleSubjects]', {
+      totalSubjects: subjects.length,
+      teacherSubjects,
+      subjectIds: subjects.map(s => ({ id: s.MaMonHoc, idType: typeof s.MaMonHoc, name: s.TenMonHoc })),
+      visible: visible.map(s => ({ MaMonHoc: s.MaMonHoc, TenMonHoc: s.TenMonHoc }))
+    });
+    return visible;
+  };
 
   // Fetch classes (with semester), subjects, and test types on mount and when semester changes
   useEffect(() => {
     setLoading(true);
     setError(null);
-    Promise.all([
-      api.getTeacherClasses({ MaHocKy: selectedSemester }),
-      api.listSubjects(),
-      api.listTestTypes(),
-    ])
-      .then(([classData, subjectData, testTypesData]) => {
+    
+    const loadData = async () => {
+      try {
+        const classData = await api.getTeacherClasses({ MaHocKy: selectedSemester });
+        const subjectData = await api.listSubjects();
+        const testTypesData = await api.listTestTypes();
+        
+        console.log('[loadData] Subjects from API:', subjectData);
+        
         setClasses(classData);
         setSubjects(subjectData);
         setTestTypes(testTypesData || []);
+        
+        // Only fetch teacher assignments if teacherId exists
+        if (teacherId) {
+          try {
+            const assignmentData = await api.getTeacherAssignments(teacherId);
+            console.log('Teacher assignments data:', assignmentData);
+            if (assignmentData && assignmentData.subject && Array.isArray(assignmentData.subject)) {
+              const teacherMaMons = Array.from(
+                new Set(assignmentData.subject
+                  .filter((a: any) => a.MaMon) // Bỏ qua những có MaMon = null
+                  .map((a: any) => String(a.MaMon)))
+              );
+              console.log('Teacher subjects (MaMon):', teacherMaMons);
+              console.log('All subject assignments:', assignmentData.subject);
+              setTeacherSubjects(teacherMaMons);
+            } else {
+              console.log('No subject array in assignment data');
+              setTeacherSubjects([]);
+            }
+          } catch (err: any) {
+            console.log('Error loading teacher assignments:', err.message);
+            setTeacherSubjects([]);
+          }
+        }
+        
         if (classData.length > 0) {
           setSelectedClass(classData[0]);
         } else {
           setSelectedClass(null);
           setGrades([]);
         }
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [selectedSemester]);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadData();
+  }, [selectedSemester, teacherId]);
 
   // Fetch students for selected class + semester, then populate grades
   useEffect(() => {
@@ -94,6 +160,114 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
     loadStudents();
   }, [selectedClass, selectedSemester]);
 
+  // Load saved grades when subject is selected
+  useEffect(() => {
+    const loadSavedGrades = async () => {
+      if (!selectedClass?.MaLop || !selectedSubject || !selectedSemester) {
+        return;
+      }
+      try {
+        const result = await api.getGradebook(
+          String(selectedClass.MaLop),
+          selectedSubject,
+          selectedSemester
+        );
+
+        // Update allSubjectsGrades to include this subject's data
+        setAllSubjectsGrades(prev => {
+          const updated = new Map<string, Map<string, any>>(prev);
+          if (result && result.grades && result.grades.length > 0) {
+            const subjectGradeMap = new Map<string, any>(result.grades.map((g: GradeEntry) => [
+              g.MaHocSinh,
+              { average: g.average, scores: g.scores }
+            ]));
+            updated.set(selectedSubject, subjectGradeMap);
+          } else {
+            updated.delete(selectedSubject);
+          }
+          return updated;
+        });
+
+        if (result && result.grades && result.grades.length > 0) {
+          // Merge saved grades with current grades (by MaHocSinh)
+          const savedMap = new Map<string, GradeEntry>(result.grades.map((g: GradeEntry) => [g.MaHocSinh, g]));
+          
+          setGrades(prevGrades =>
+            prevGrades.map(g => {
+              const saved = savedMap.get(g.MaHocSinh);
+              if (saved) {
+                return {
+                  ...g,
+                  scores: saved.scores,
+                  average: saved.average
+                };
+              }
+              return {
+                ...g,
+                scores: {
+                  mieng15Phut: '',
+                  mot1Tiet: '',
+                  giuaKy: '',
+                  cuoiKy: ''
+                },
+                average: null
+              };
+            })
+          );
+        } else {
+          // Nếu không có điểm lưu, reset tất cả scores
+          setGrades(prevGrades =>
+            prevGrades.map(g => ({
+              ...g,
+              scores: {
+                mieng15Phut: '',
+                mot1Tiet: '',
+                giuaKy: '',
+                cuoiKy: ''
+              },
+              average: null
+            }))
+          );
+        }
+      } catch (err: any) {
+        // Silently fail - it's okay if there are no saved grades
+        console.log('No saved grades found or error loading them');
+        // Reset scores khi có lỗi
+        setGrades(prevGrades =>
+          prevGrades.map(g => ({
+            ...g,
+            scores: {
+              mieng15Phut: '',
+              mot1Tiet: '',
+              giuaKy: '',
+              cuoiKy: ''
+            },
+            average: null
+          }))
+        );
+      }
+    };
+    loadSavedGrades();
+  }, [selectedClass, selectedSubject, selectedSemester]);
+
+  // Load ThamSo (configuration with weights) when class is selected
+  useEffect(() => {
+    const loadThamSo = async () => {
+      if (!selectedClass?.MaNamHoc) {
+        setThamSo(null);
+        return;
+      }
+      try {
+        const result = await api.getThamSo(String(selectedClass.MaNamHoc));
+        setThamSo(result);
+      } catch (err: any) {
+        console.log('No ThamSo found for year:', selectedClass.MaNamHoc);
+        setThamSo(null);
+      }
+    };
+    loadThamSo();
+  }, [selectedClass]);
+
   const parseScores = (scoreString: string): number[] => {
     if (!scoreString.trim()) return [];
     return scoreString.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
@@ -117,6 +291,75 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
     
     const average = (cuoiKy * 3 + giuaKy * 3 + tiet1Avg * 2 + mieng15Avg) / 9;
     return Math.round(average * 10) / 10;
+  };
+
+  // Calculate individual student's overall GPA across all subjects
+  const calculateStudentOverallGPA = (studentId: string): number | null => {
+    if (allSubjectsGrades.size === 0) return null;
+
+    let totalScore = 0;
+    let totalWeight = 0;
+
+    // Iterate through all subjects
+    for (const [subjectId, studentGradesMap] of allSubjectsGrades) {
+      const subject = subjects.find(s => String(s.MaMonHoc) === subjectId);
+      const hesoMon = subject?.HeSoMon || 1;
+      const gradeData = studentGradesMap.get(studentId);
+
+      if (gradeData && gradeData.average && !isNaN(gradeData.average)) {
+        totalScore += gradeData.average * hesoMon;
+        totalWeight += hesoMon;
+      }
+    }
+
+    if (totalWeight === 0) return null;
+    return Math.round((totalScore / totalWeight) * 10) / 10;
+  };
+
+  // Calculate overall GPA (tổng điểm tổng kết) from all subjects with weights
+  const calculateOverallGPA = (): { gpa: number | null; details: string } => {
+    if (!selectedClass?.MaLop || !selectedSemester || allSubjectsGrades.size === 0) {
+      return { gpa: null, details: '' };
+    }
+
+    // Map to store student overall scores
+    const studentOverallScores: Map<string, { totalScore: number; totalWeight: number }> = new Map();
+
+    // Iterate through all subjects
+    for (const [subjectId, studentGradesMap] of allSubjectsGrades) {
+      const subject = subjects.find(s => String(s.MaMonHoc) === subjectId);
+      const hesoMon = subject?.HeSoMon || 1; // Default hệ số = 1 if not found
+
+      // For each student in this subject
+      for (const [studentId, gradeData] of studentGradesMap) {
+        if (!gradeData.average || isNaN(gradeData.average)) continue;
+
+        if (!studentOverallScores.has(studentId)) {
+          studentOverallScores.set(studentId, { totalScore: 0, totalWeight: 0 });
+        }
+
+        const current = studentOverallScores.get(studentId)!;
+        current.totalScore += gradeData.average * hesoMon;
+        current.totalWeight += hesoMon;
+      }
+    }
+
+    // Calculate overall GPA for each student
+    let classGPA = 0;
+    let validStudents = 0;
+
+    for (const [, scoreData] of studentOverallScores) {
+      if (scoreData.totalWeight > 0) {
+        const gpa = scoreData.totalScore / scoreData.totalWeight;
+        classGPA += gpa;
+        validStudents += 1;
+      }
+    }
+
+    const finalGPA = validStudents > 0 ? Math.round((classGPA / validStudents) * 10) / 10 : null;
+    const details = validStudents > 0 ? `${validStudents}/${grades.length} học sinh` : '';
+    
+    return { gpa: finalGPA, details };
   };
 
   const resolveTestTypeIds = () => {
@@ -174,6 +417,12 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
   const handleSave = async () => {
     if (!selectedClass || !selectedSubject || !selectedSemester) {
       alert('Vui lòng chọn lớp, môn học và học kỳ');
+      return;
+    }
+
+    // Verify teacher has permission to edit this subject
+    if (!canEditCurrentSubject()) {
+      alert('Bạn không được phân công dạy môn này');
       return;
     }
 
@@ -248,6 +497,11 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
   };
 
   const handleImportGrades = async () => {
+    if (!canEditCurrentSubject()) {
+      setError('Bạn không được phân công dạy môn này');
+      return;
+    }
+    
     if (!importFile) {
       setError('Vui lòng chọn file');
       return;
@@ -318,6 +572,12 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
 
       {loading && <div className="text-green-600 mb-4">Đang tải dữ liệu...</div>}
 
+      {teacherSubjects.length === 0 && !loading && (
+        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-6">
+          <p className="text-yellow-800"><strong>⚠️ Chú ý:</strong> Bạn chưa được phân công dạy môn nào. Vui lòng liên hệ quản trị viên.</p>
+        </div>
+      )}
+
       <div className="bg-white p-6 rounded-xl shadow-sm mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -346,12 +606,15 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="">-- Chọn môn học --</option>
-              {subjects.map((subject) => (
+              {getVisibleSubjects().map((subject) => (
                 <option key={subject.MaMonHoc} value={subject.MaMonHoc}>
                   {subject.TenMonHoc}
                 </option>
               ))}
             </select>
+            {getVisibleSubjects().length === 0 && (
+              <p className="text-sm text-orange-600 mt-1">⚠️ Bạn không được phân công dạy môn nào</p>
+            )}
           </div>
           <div>
             <label className="block text-gray-700 mb-2">Học kỳ</label>
@@ -372,18 +635,25 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
           <Upload className="w-5 h-5 text-green-600" />
           Nhập điểm từ file Excel/CSV
         </h3>
+        {selectedSubject && !canEditCurrentSubject() && (
+          <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg mb-3">
+            <p className="text-orange-700 text-sm">⚠️ Bạn không được phân công dạy môn này</p>
+          </div>
+        )}
         <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
           <input
             type="file"
             accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={(e) => setImportFile(e.target.files?.[0] || null)}
             className="text-sm flex-1"
+            disabled={!canEditCurrentSubject()}
           />
           <div className="flex gap-2">
             <button
               onClick={handleImportGrades}
-              disabled={importing || !importFile}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
+              disabled={importing || !importFile || !canEditCurrentSubject()}
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              title={!canEditCurrentSubject() ? 'Bạn không được phân công dạy môn này' : ''}
             >
               <Upload className="w-4 h-4" />
               {importing ? 'Đang nhập...' : 'Nhập file'}
@@ -457,7 +727,7 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
                   <div>Điểm Cuối kỳ</div>
                   <div className="text-xs text-gray-500">(VD: 8)</div>
                 </th>
-                <th className="px-4 py-3 text-center text-gray-700 bg-green-50">ĐTB Môn</th>
+                <th className="px-4 py-3 text-center text-gray-700 border-r bg-green-50">ĐTB Môn</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -480,7 +750,10 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
                         type="text"
                         value={entry.scores.mieng15Phut}
                         onChange={(e) => handleScoreChange(entry.MaHocSinh, 'mieng15Phut', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={!canEditCurrentSubject()}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          !canEditCurrentSubject() ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed' : 'border-gray-300'
+                        }`}
                         placeholder="8, 7.5, 9"
                       />
                     </td>
@@ -491,7 +764,10 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
                         type="text"
                         value={entry.scores.mot1Tiet}
                         onChange={(e) => handleScoreChange(entry.MaHocSinh, 'mot1Tiet', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        disabled={!canEditCurrentSubject()}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                          !canEditCurrentSubject() ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed' : 'border-gray-300'
+                        }`}
                         placeholder="8, 7"
                       />
                     </td>
@@ -502,7 +778,10 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
                         type="text"
                         value={entry.scores.giuaKy}
                         onChange={(e) => handleScoreChange(entry.MaHocSinh, 'giuaKy', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                        disabled={!canEditCurrentSubject()}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
+                          !canEditCurrentSubject() ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed' : 'border-gray-300'
+                        }`}
                         placeholder="7.5"
                       />
                     </td>
@@ -513,13 +792,16 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
                         type="text"
                         value={entry.scores.cuoiKy}
                         onChange={(e) => handleScoreChange(entry.MaHocSinh, 'cuoiKy', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        disabled={!canEditCurrentSubject()}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                          !canEditCurrentSubject() ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed' : 'border-gray-300'
+                        }`}
                         placeholder="8"
                       />
                     </td>
 
                     {/* ĐTB Môn */}
-                    <td className="px-4 py-3 text-center bg-green-50">
+                    <td className="px-4 py-3 text-center border-r bg-green-50">
                       <span className={`px-3 py-2 rounded inline-block min-w-[50px] ${
                         entry.average !== null && entry.average >= 8 ? 'bg-green-100 text-green-700' :
                         entry.average !== null && entry.average >= 6.5 ? 'bg-blue-100 text-blue-700' :
@@ -537,11 +819,96 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
         </div>
       </div>
 
+      {/* Phần thể hiện điểm tổng kết */}
+      {grades.length > 0 && (() => {
+        const gpaResult = calculateOverallGPA();
+        return (
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-xl shadow-sm border border-indigo-200 mb-6">
+            <h3 className="text-lg font-semibold text-indigo-900 mb-4">📊 Tính điểm tổng kết</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="bg-white p-4 rounded-lg">
+                <p className="text-gray-600 text-sm">Hệ số Miệng/15 phút</p>
+                <p className="text-2xl font-bold text-indigo-600">{(Number(thamSo?.HesoMieng) || 1).toFixed(1)}</p>
+              </div>
+              <div className="bg-white p-4 rounded-lg">
+                <p className="text-gray-600 text-sm">Hệ số 1 Tiết & Giữa kỳ</p>
+                <p className="text-2xl font-bold text-purple-600">{(Number(thamSo?.HesoChinh15p) || 1).toFixed(1)} / {(Number(thamSo?.HesoGiuaky) || 3).toFixed(1)}</p>
+              </div>
+              <div className="bg-white p-4 rounded-lg">
+                <p className="text-gray-600 text-sm">Hệ số Cuối kỳ</p>
+                <p className="text-2xl font-bold text-pink-600">{(Number(thamSo?.HesoCuoiky) || 3).toFixed(1)}</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg border-2 border-indigo-300">
+              <p className="text-gray-700 font-medium mb-2">Công thức tính ĐTB môn:</p>
+              <p className="text-sm text-gray-600 mb-3">
+                <span className="font-mono bg-gray-100 px-2 py-1 rounded">
+                  (Cuối kỳ × 3 + Giữa kỳ × 3 + ĐTB 1 Tiết × 2 + ĐTB Miệng/15' × 1) / 9
+                </span>
+              </p>
+              <p className="text-gray-700 font-medium mb-2">Công thức tính điểm tổng kết:</p>
+              <p className="text-sm text-gray-600 mb-4">
+                <span className="font-mono bg-gray-100 px-2 py-1 rounded">
+                  (Toán × HeSoToán + Văn × HeSoVăn + ...) / Tổng Hệ Số
+                </span>
+              </p>
+              <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-200">
+                <p className="text-sm font-medium text-blue-900 mb-2">Hệ số các môn:</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {subjects.map(subject => (
+                    <div key={subject.MaMonHoc} className="text-sm">
+                      <span className="font-medium text-blue-700">{subject.TenMonHoc}:</span>
+                      <span className="text-blue-600 ml-1">{(Number(subject.HeSoMon) || 1).toFixed(1)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="text-gray-700 font-medium mb-2">Điểm tổng kết lớp:</p>
+              <div className="flex items-end gap-4">
+                <div>
+                  <p className="text-gray-600 text-sm">Điểm TB tất cả môn</p>
+                  <p className={`text-3xl font-bold ${
+                    gpaResult.gpa !== null && gpaResult.gpa >= 5 ? 'text-green-600' :
+                    gpaResult.gpa !== null ? 'text-red-600' : 'text-gray-400'
+                  }`}>
+                    {gpaResult.gpa !== null ? gpaResult.gpa.toFixed(2) : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600 text-sm">Trạng thái</p>
+                  <p className={`text-lg font-bold px-3 py-1 rounded ${
+                    gpaResult.gpa !== null && gpaResult.gpa >= 5 
+                      ? 'bg-green-100 text-green-700' 
+                      : gpaResult.gpa !== null
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {gpaResult.gpa !== null && gpaResult.gpa >= 5 ? '✓ ĐẠT' : gpaResult.gpa !== null ? '✗ KHÔNG ĐẠT' : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600 text-sm">Thống kê</p>
+                  <p className="text-lg font-semibold text-indigo-600">
+                    {gpaResult.details}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="flex justify-end">
         <button
           onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400"
+          disabled={saving || !canEditCurrentSubject()}
+          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
+            canEditCurrentSubject()
+              ? 'bg-green-600 text-white hover:bg-green-700'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
+          title={!canEditCurrentSubject() ? 'Bạn không được phân công dạy môn này' : ''}
         >
           <Save className="w-5 h-5" />
           {saving ? 'Đang lưu...' : 'Lưu bảng điểm'}

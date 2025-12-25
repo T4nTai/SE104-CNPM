@@ -164,4 +164,17 @@ export class TeacherController {
       res.status(201).json({ data: result });
     } catch (e) { next(e); }
   }
+
+  // GET /teacher/gradebooks/class/:MaLop/subject/:MaMon/semester/:MaHocKy
+  static async getGradebook(req, res, next) {
+    try {
+      const { MaLop, MaMon, MaHocKy } = req.params;
+      const result = await TeacherService.getGradebookByClassSubjectSemester({
+        MaLop: Number(MaLop),
+        MaMon: Number(MaMon),
+        MaHocKy: Number(MaHocKy)
+      });
+      res.json({ data: result });
+    } catch (e) { next(e); }
+  }
 }

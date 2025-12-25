@@ -97,7 +97,7 @@ export class TeacherService {
       } : null
     });
 
-    const mappedSubject = subject.map((r) => {
+    const mappedSubject = subject.map((r, idx) => {
       // Try both uppercase and normal case for associations
       const lop = r.LOP || r.Lop;
       const hocKy = r.HOCKY || r.HocKy;
@@ -114,7 +114,10 @@ export class TeacherService {
         MaMon: r.MaMon,
         TenMonHoc: monHoc?.TenMonHoc || null,
       };
-      console.log('[listAssignmentsForTeacher] Mapped subject item:', mapped);
+      console.log(`[listAssignmentsForTeacher] Subject item ${idx}:`, {
+        raw: { MaMon: r.MaMon, MaMonHoc: r.MonHoc?.MaMonHoc },
+        mapped
+      });
       return mapped;
     });
 
@@ -806,6 +809,110 @@ export class TeacherService {
       return { grades };
     } catch (err) {
       throw { status: 400, message: "Lỗi khi đọc file: " + (err.message || "Unknown error") };
+    }
+  }
+
+  // GET gradebook for a class/subject/semester to load saved grades
+  static async getGradebookByClassSubjectSemester({ MaLop, MaMon, MaHocKy }) {
+    if (MaLop == null || MaMon == null || MaHocKy == null) {
+      throw { status: 400, message: "MaLop/MaMon/MaHocKy are required" };
+    }
+
+    try {
+      // Find the BangDiemMon record
+      const bdm = await BangDiemMon.findOne({
+        where: { MaLop, MaMon, MaHocKy }
+      });
+
+      if (!bdm) {
+        return { grades: [] };
+      }
+
+      // Get all student entries for this BangDiemMon
+      const ctList = await CTBangDiemMonHocSinh.findAll({
+        where: { MaBangDiemMon: bdm.MaBangDiemMon },
+        include: [
+          {
+            model: HocSinh,
+            attributes: ['MaHocSinh', 'HoTen'],
+            required: false
+          }
+        ]
+      });
+
+      // For each student, get their detailed scores
+      const grades = [];
+      for (const ct of ctList) {
+        const details = await CTBangDiemMonLHKT.findAll({
+          where: { MaCTBangDiemMon: ct.MaCTBangDiemMon }
+        });
+
+        // Get the LHKT info for each detail score
+        const lhktList = await LoaiHinhKiemTra.findAll();
+        
+        // Group details by LHKT to reconstruct the scores format
+        const scoresByLHKT = {};
+        for (const detail of details) {
+          if (!scoresByLHKT[detail.MaLHKT]) {
+            scoresByLHKT[detail.MaLHKT] = [];
+          }
+          if (detail.Diem != null) {
+            scoresByLHKT[detail.MaLHKT].push(detail.Diem);
+          }
+        }
+
+        // Get the student name
+        let hoTen = '';
+        if (ct.HocSinh) {
+          hoTen = ct.HocSinh.HoTen || '';
+        } else {
+          const hs = await HocSinh.findByPk(ct.MaHocSinh);
+          hoTen = hs?.HoTen || '';
+        }
+
+        // Classify LHKT and map to score fields
+        const classifyLHKT = (maLHKT, tenLHKT = '') => {
+          const name = (tenLHKT || '').toLowerCase();
+          if (name.includes('miệng') || name.includes('mieng')) return 'mieng15Phut';
+          if (name.includes('15')) return 'mieng15Phut';
+          if (name.includes('1 tiết') || name.includes('1t') || name.includes('tiết')) return 'mot1Tiet';
+          if (name.includes('giữa') || name.includes('giuaki')) return 'giuaKy';
+          if (name.includes('cuối') || name.includes('cuoiki')) return 'cuoiKy';
+          if (Number(maLHKT) === 1) return 'mieng15Phut';
+          if (Number(maLHKT) === 2) return 'mot1Tiet';
+          if (Number(maLHKT) === 3) return 'giuaKy';
+          if (Number(maLHKT) === 4) return 'cuoiKy';
+          return null;
+        };
+
+        const scores = {
+          mieng15Phut: '',
+          mot1Tiet: '',
+          giuaKy: '',
+          cuoiKy: ''
+        };
+
+        for (const [maLHKT, scoreArray] of Object.entries(scoresByLHKT)) {
+          const lhkt = lhktList.find(x => x.MaLHKT == maLHKT);
+          const fieldName = classifyLHKT(maLHKT, lhkt?.TenLHKT);
+          
+          if (fieldName && scoreArray.length > 0) {
+            scores[fieldName] = scoreArray.map(s => Number(s).toFixed(1)).join(', ');
+          }
+        }
+
+        grades.push({
+          MaHocSinh: ct.MaHocSinh,
+          HoTen: hoTen,
+          scores,
+          average: ct.DiemTBMon
+        });
+      }
+
+      return { grades };
+    } catch (err) {
+      console.error('[getGradebookByClassSubjectSemester] Error:', err);
+      throw { status: 500, message: "Lỗi khi tải bảng điểm: " + (err.message || "Unknown error") };
     }
   }
 }

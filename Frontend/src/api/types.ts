@@ -45,6 +45,7 @@ export interface ClassInfo {
   TenKhoiLop?: string;
   MaNamHoc?: string;
   NamHoc?: string;
+  MaGVCN?: string | number; // Mã giáo viên chủ nhiệm (homeroom teacher ID)
   SiSo?: number;
   SoLuongHocSinh?: number;
   roles?: ('homeroom' | 'subject')[]; // Roles of teacher in this class

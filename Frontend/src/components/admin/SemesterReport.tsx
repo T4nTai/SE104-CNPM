@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { FileText, Download } from 'lucide-react';
 import { api } from '../../api/client';
+import jsPDF from 'jspdf';
+import { toPng } from 'html-to-image';
 
 interface ClassReportData {
   className: string;
@@ -39,6 +41,7 @@ const renderPieLabel = ({ cx, cy, midAngle, outerRadius, percent, name }: any) =
 };
 
 export function SemesterReport() {
+  const reportRef = useRef<HTMLDivElement>(null);
   const [years, setYears] = useState<any[]>([]);
   const [semesters, setSemesters] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
@@ -152,6 +155,44 @@ export function SemesterReport() {
     URL.revokeObjectURL(url);
   };
 
+  const exportPdf = async () => {
+    if (!reportRef.current || !report) {
+      alert('Vui lòng đợi dữ liệu tải xong trước khi xuất PDF.');
+      return;
+    }
+
+    try {
+      // Đợi SVG charts render xong
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const dataUrl = await toPng(reportRef.current, {
+        backgroundColor: '#ffffff',
+        cacheBust: true,
+        pixelRatio: 2,
+      });
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve) => { img.onload = resolve; });
+      const imgWidth = img.width;
+      const imgHeight = img.height;
+
+      const ratio = Math.min((pdfWidth - 20) / imgWidth, (pdfHeight - 20) / imgHeight);
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = 10;
+
+      pdf.addImage(dataUrl, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+      pdf.save(`BaoCaoHocKy_${selectedYear}_${selectedSemester}_${selectedClass}.pdf`);
+    } catch (error) {
+      console.error('Lỗi khi xuất PDF:', error);
+      alert(`Không thể xuất PDF: ${error instanceof Error ? error.message : 'Vui lòng thử lại'}`);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -159,13 +200,19 @@ export function SemesterReport() {
           <FileText className="w-8 h-8 text-indigo-600" />
           <h1 className="text-indigo-900">Báo cáo tổng kết học kỳ</h1>
         </div>
-        <button onClick={exportCsv} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
-          <Download className="w-5 h-5" />
-          Xuất báo cáo
-        </button>
+        <div className="flex gap-2">
+          <button onClick={exportCsv} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+            <Download className="w-5 h-5" />
+            Xuất CSV
+          </button>
+          <button onClick={exportPdf} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+            <Download className="w-5 h-5" />
+            Xuất PDF
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm mb-6">
+      <div ref={reportRef} className="bg-white p-6 rounded-xl shadow-sm mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-gray-700 mb-2">Năm học</label>

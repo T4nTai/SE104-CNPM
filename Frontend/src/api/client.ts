@@ -228,6 +228,11 @@ export const api = {
     return data.data || data;
   },
 
+  async getGradebook(MaLop: string, MaMon: string, MaHocKy: string): Promise<any> {
+    const { data } = await apiClient.get(`/teacher/gradebooks/class/${MaLop}/subject/${MaMon}/semester/${MaHocKy}`);
+    return data.data || data;
+  },
+
   async getTeacherAssignments(MaGV?: string | number): Promise<{ homeroom: any[]; subject: any[] }> {
     // MaGV is optional now - backend will extract from JWT token
     const { data } = await apiClient.get('/teacher/assignments', MaGV ? { params: { MaGV } } : undefined);
@@ -406,6 +411,12 @@ export const api = {
     const { data } = await apiClient.get(`/admin/namhoc/${MaNH}/thamso`);
     return data.data || data;
   },
+
+  async getThamSo(MaNH: string): Promise<any> {
+    const { data } = await apiClient.get(`/admin/namhoc/${MaNH}/thamso`);
+    return data.data || data;
+  },
+
   async upsertParameters(MaNH: string, payload: {
     tuoiToiThieu: number;
     tuoiToiDa: number;

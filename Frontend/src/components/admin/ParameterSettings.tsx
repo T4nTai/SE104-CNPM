@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Save, Settings, Plus, Edit2, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Save, Settings } from 'lucide-react';
 import { api } from '../../api/client';
 
 interface SystemParameters {
@@ -100,7 +100,12 @@ export function ParameterSettings() {
         maxStudentsPerClass: toNum(resp?.SiSoToiDa) ?? INITIAL_PARAMS.maxStudentsPerClass,
         minAge: toNum(resp?.TuoiToiThieu) ?? INITIAL_PARAMS.minAge,
         maxAge: toNum(resp?.TuoiToiDa) ?? INITIAL_PARAMS.maxAge,
-        gradeWeight: { ...params.gradeWeight },
+        gradeWeight: {
+          mieng15Phut: toNum(resp?.HesoMieng) ?? INITIAL_PARAMS.gradeWeight.mieng15Phut,
+          mot1Tiet: toNum(resp?.HesoChinh15p) ?? INITIAL_PARAMS.gradeWeight.mot1Tiet,
+          giuaKy: toNum(resp?.HesoGiuaky) ?? INITIAL_PARAMS.gradeWeight.giuaKy,
+          cuoiKy: toNum(resp?.HesoCuoiky) ?? INITIAL_PARAMS.gradeWeight.cuoiKy,
+        },
       };
       setParams(mapped);
     } catch (err: any) {
@@ -140,19 +145,24 @@ export function ParameterSettings() {
       
       // Map frontend state to backend payload (exactly as backend expects)
       const payload = {
-        tuoiToiThieu: Number(params.minAge),
-        tuoiToiDa: Number(params.maxAge),
-        soHocSinhToiDa1Lop: Number(params.maxStudentsPerClass),
-        diemToiThieu: 0,  // Min score (default 0)
-        diemToiDa: 10,    // Max score (default 10)
-        diemDatToiThieu: Number(params.diemDatMon),      // Min passing grade per subject
-        diemToiThieuHocKy: Number(params.diemDatHocKy),  // Min passing grade per semester
+        TuoiToiThieu: Number(params.minAge),
+        TuoiToiDa: Number(params.maxAge),
+        SiSoToiDa: Number(params.maxStudentsPerClass),
+        DiemToiThieu: 0,
+        DiemToiDa: 10,
+        DiemDatMon: Number(params.diemDatMon),
+        DiemDat: Number(params.diemDatHocKy),
+        HesoMieng: params.gradeWeight.mieng15Phut || null,
+        HesoChinh15p: params.gradeWeight.mot1Tiet || null,
+        HesoGiuaky: params.gradeWeight.giuaKy || null,
+        HesoCuoiky: params.gradeWeight.cuoiKy || null,
       };
 
       console.log('[ParameterSettings] MaNH:', selectedYearId);
       console.log('[ParameterSettings] Sending payload:', JSON.stringify(payload, null, 2));
       
-      await api.upsertParameters(selectedYearId.toString(), payload);
+      // Cast to align with existing API typing that still uses old field names
+      await api.upsertParameters(selectedYearId.toString(), payload as any);
       
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);

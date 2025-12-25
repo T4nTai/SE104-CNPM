@@ -14,6 +14,7 @@ import { GradeSearch } from './shared/GradeSearch';
 import { StudentSearch } from './teacher/StudentSearch';
 import { Assignments } from './teacher/Assignments';
 import { UserProfile } from './shared/UserProfile';
+import { HomeroomGradeView } from './teacher/HomeroomGradeView';
 
 interface TeacherDashboardProps {
   user: User;
@@ -25,6 +26,7 @@ type TeacherScreen =
   | 'assignments'
   | 'class-list'
   | 'grade-entry'
+  | 'homeroom-grades'
   | 'grade-search'
   | 'student-search'
   | 'profile';
@@ -38,6 +40,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
     { id: 'assignments' as TeacherScreen, label: 'Phân công của tôi', icon: ClipboardList },
     { id: 'class-list' as TeacherScreen, label: 'Danh sách lớp', icon: Users },
     { id: 'grade-entry' as TeacherScreen, label: 'Nhập bảng điểm', icon: ClipboardList },
+    { id: 'homeroom-grades' as TeacherScreen, label: 'Bảng điểm lớp chủ nhiệm', icon: GraduationCap },
     { id: 'grade-search' as TeacherScreen, label: 'Tra cứu điểm', icon: Search },
     { id: 'student-search' as TeacherScreen, label: 'Tra cứu học sinh', icon: Search },
   ];
@@ -114,6 +117,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
           )}
           {currentScreen === 'class-list' && <ClassListManagement teacherId={teacherId} />}
           {currentScreen === 'assignments' && <Assignments user={user} />}
+          {currentScreen === 'homeroom-grades' && <HomeroomGradeView teacherId={teacherId} />}
           {currentScreen === 'grade-entry' && <GradeEntry teacherId={teacherId} />}
           {currentScreen === 'grade-search' && <GradeSearch userRole="teacher" teacherId={teacherId} />}
           {currentScreen === 'student-search' && <StudentSearch />}

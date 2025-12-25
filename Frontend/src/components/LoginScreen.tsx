@@ -34,8 +34,10 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           | 'teacher',
       });
     } catch (err: any) {
+      const serverMessage = err?.response?.data?.message;
       setError(
-        err.message ||
+        serverMessage ||
+          err.message ||
           'Đăng nhập thất bại. Vui lòng kiểm tra tên đăng nhập và mật khẩu.',
       );
     } finally {

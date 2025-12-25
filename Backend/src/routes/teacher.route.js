@@ -21,6 +21,7 @@ TeacherRoute.delete("/students/:MaHocSinh", TeacherController.deleteStudent);
 
 TeacherRoute.post("/gradebooks/enter", TeacherController.enterGradebook);
 TeacherRoute.post("/classes/:MaLop/subjects/:MaMon/semesters/:MaHocKy/import-grades", upload.single("file"), TeacherController.importGrades);
+TeacherRoute.get("/gradebooks/class/:MaLop/subject/:MaMon/semester/:MaHocKy", TeacherController.getGradebook);
 
 TeacherRoute.get("/students/:MaHocSinh/scores", TeacherController.lookupScoresOfStudent);
 TeacherRoute.get("/students/search", TeacherController.searchStudents);
