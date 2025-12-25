@@ -84,6 +84,23 @@ export function RegulationManagement() {
     }
   };
 
+  const handleDeleteAcademicYear = async (MaNH: number) => {
+    if (!confirm('Bạn có chắc chắn muốn xóa năm học này?')) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      await api.deleteAcademicYear(MaNH);
+      setSuccess(true);
+      await Promise.all([loadAcademicYears(), loadClasses()]);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err.message || 'Không thể xóa năm học');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadSemesters = async () => {
     try {
       setLoading(true);
@@ -539,7 +556,16 @@ export function RegulationManagement() {
               {academicYears.map((year) => (
                 <div key={year.MaNH} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="text-gray-900">{year.Nam1} - {year.Nam2}</div>
-                  <span className="text-sm text-gray-600">Mã: {year.MaNH}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-600">Mã: {year.MaNH}</span>
+                    <button
+                      onClick={() => handleDeleteAcademicYear(year.MaNH)}
+                      className="text-red-600 hover:text-red-800"
+                      title="Xóa năm học"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
               {academicYears.length === 0 && (

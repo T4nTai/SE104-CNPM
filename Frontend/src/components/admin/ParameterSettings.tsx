@@ -44,6 +44,7 @@ export function ParameterSettings() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [deleted, setDeleted] = useState(false);
 
   // Fetch academic years on mount
   useEffect(() => {
@@ -112,6 +113,7 @@ export function ParameterSettings() {
       // If 404 or no data, just use defaults
       console.log('Using default parameters (none saved yet for this year)');
       setParams(INITIAL_PARAMS);
+      setDeleted(false);
     } finally {
       setLoading(false);
     }
@@ -174,6 +176,27 @@ export function ParameterSettings() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!selectedYearId) {
+      setError('Vui lòng chọn năm học');
+      return;
+    }
+    if (!confirm('Bạn chắc chắn muốn xoá toàn bộ tham số của năm học này?')) return;
+
+    try {
+      setLoading(true);
+      setError('');
+      await api.deleteParameters(selectedYearId.toString());
+      setParams(INITIAL_PARAMS);
+      setDeleted(true);
+      setTimeout(() => setDeleted(false), 3000);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Không thể xoá tham số');
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
 
   return (
@@ -198,6 +221,12 @@ export function ParameterSettings() {
       {saved && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
           Đã lưu thay đổi thành công!
+        </div>
+      )}
+
+      {deleted && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6">
+          Đã xoá tham số của năm học này.
         </div>
       )}
 
@@ -359,14 +388,24 @@ export function ParameterSettings() {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={loading || !selectedYearId}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-        >
-          <Save className="w-5 h-5" />
-          Lưu tham số {selectedYearId ? `cho năm học ${academicYears.find(y => y.MaNH === selectedYearId)?.name}` : ''}
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={loading || !selectedYearId}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            <Save className="w-5 h-5" />
+            Lưu tham số {selectedYearId ? `cho năm học ${academicYears.find(y => y.MaNH === selectedYearId)?.name}` : ''}
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={loading || !selectedYearId}
+            className="flex items-center gap-2 bg-red-50 text-red-700 px-6 py-3 rounded-lg border border-red-200 hover:bg-red-100 disabled:bg-gray-100 disabled:cursor-not-allowed"
+          >
+            Xoá tham số năm
+          </button>
+        </div>
       </form>
     </div>
   );

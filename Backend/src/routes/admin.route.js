@@ -11,6 +11,7 @@ AdminRoute.use(authenticateJWT);
 // ===== Nam Hoc (Academic Years) =====
 AdminRoute.get("/namhoc", AdminController.listNamHoc);
 AdminRoute.post("/namhoc", AdminController.createNamHoc);
+AdminRoute.delete("/namhoc/:MaNH", AdminController.deleteNamHoc);
 
 // ===== Khoi Lop =====
 AdminRoute.post("/khoilop", AdminController.createKhoiLop);

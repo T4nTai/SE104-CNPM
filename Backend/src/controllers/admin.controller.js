@@ -17,6 +17,16 @@ export class AdminController {
     } catch (e) { next(e); }
   }
 
+  static async deleteNamHoc(req, res, next) {
+    try {
+      const id = Number(req.params.MaNH);
+      if (!Number.isInteger(id)) throw { status: 400, message: "MaNH không hợp lệ" };
+
+      const result = await AdminService.deleteNamHoc(id);
+      res.json({ data: result });
+    } catch (e) { next(e); }
+  }
+
   // ===== KHOI LOP =====
   static async createKhoiLop(req, res, next) {
     try {

@@ -38,6 +38,7 @@ export function ClassListManagement({ teacherId }: { teacherId: number | null })
   const [semesters, setSemesters] = useState<Array<{ MaHK: number; TenHK: string }>>([]);
   const [selectedSemester, setSelectedSemester] = useState<string>('');
   const [grades, setGrades] = useState<Array<{ MaKL: number; TenKL: string }>>([]);
+  const [thamSo, setThamSo] = useState<any>(null);
   const [formData, setFormData] = useState<{
     MaHocSinh: string;
     HoTen: string;
@@ -105,6 +106,17 @@ export function ClassListManagement({ teacherId }: { teacherId: number | null })
         
         console.log('[ClassListManagement] Loaded classes:', classData);
         setClasses(classData || []);
+
+        // Load parameters for default academic year
+        if (defaultYearId) {
+          try {
+            const ts = await api.getParameters(String(defaultYearId));
+            setThamSo(ts || null);
+            console.log('[ClassListManagement] Loaded parameters:', ts);
+          } catch (e) {
+            console.warn('[ClassListManagement] Cannot load parameters:', e);
+          }
+        }
       } catch (err: any) {
         console.error('[ClassListManagement] Error loading data:', err);
         setError(err.response?.data?.message || err.message || 'Không thể tải dữ liệu ban đầu');
@@ -134,6 +146,17 @@ export function ClassListManagement({ teacherId }: { teacherId: number | null })
         
         console.log('[ClassListManagement] Reloaded classes:', classData);
         setClasses(classData || []);
+
+        // Reload parameters when academic year changes
+        if (selectedYearId) {
+          try {
+            const ts = await api.getParameters(String(selectedYearId));
+            setThamSo(ts || null);
+            console.log('[ClassListManagement] Reloaded parameters:', ts);
+          } catch (e) {
+            console.warn('[ClassListManagement] Cannot reload parameters:', e);
+          }
+        }
       } catch (err: any) {
         console.error('[ClassListManagement] Error reloading classes:', err);
         setError(err.response?.data?.message || err.message || 'Không thể tải danh sách lớp');
@@ -172,19 +195,27 @@ export function ClassListManagement({ teacherId }: { teacherId: number | null })
     if (!selectedClass) return;
 
     try {
+      const toNum = (v: any, def: number) => {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? n : def;
+      };
+      const tuoiToiThieu = toNum(thamSo?.TuoiToiThieu, 15);
+      const tuoiToiDa = toNum(thamSo?.TuoiToiDa, 20);
+      const siSoToiDa = toNum(thamSo?.SiSoToiDa, 40);
+
       // Check age (15-20)
       const birthDate = new Date(formData.NgaySinh);
       const today = new Date();
       const age = today.getFullYear() - birthDate.getFullYear();
 
-      if (age < 15 || age > 20) {
-        alert('Tuổi học sinh phải từ 15 đến 20');
+      if (age < tuoiToiThieu || age > tuoiToiDa) {
+        alert(`Tuổi học sinh phải từ ${tuoiToiThieu} đến ${tuoiToiDa}`);
         return;
       }
 
       // Check class capacity
-      if (!editingStudentId && (selectedClass.DanhSachHocSinh?.length ?? 0) >= 40) {
-        alert('Lớp đã đủ sĩ số (tối đa 40 học sinh)');
+      if (!editingStudentId && (selectedClass.DanhSachHocSinh?.length ?? 0) >= siSoToiDa) {
+        alert(`Lớp đã đủ sĩ số (tối đa ${siSoToiDa} học sinh)`);
         return;
       }
 

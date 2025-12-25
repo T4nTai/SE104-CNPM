@@ -166,6 +166,24 @@ export class AdminService {
     return await NamHoc.create({ Nam1, Nam2 });
   }
 
+  static async deleteNamHoc(MaNH) {
+    const row = await NamHoc.findByPk(MaNH);
+    if (!row) throw { status: 404, message: "NamHoc not found" };
+
+    const hasClasses = await Lop.count({ where: { MaNamHoc: MaNH } });
+    if (hasClasses > 0) {
+      throw { status: 400, message: "Không thể xoá năm học vì đang có lớp thuộc năm học này" };
+    }
+
+    const hasThamSo = await ThamSo.count({ where: { MaNamHoc: MaNH } });
+    if (hasThamSo > 0) {
+      throw { status: 400, message: "Không thể xoá năm học vì đang có tham số cấu hình gắn với năm học" };
+    }
+
+    await row.destroy();
+    return { deleted: true };
+  }
+
   // ===== KHOI LOP =====
   static async createKhoiLop({ TenKL, SoLop = null }) {
     if (!TenKL) throw { status: 400, message: "TenKL is required" };

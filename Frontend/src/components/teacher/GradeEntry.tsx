@@ -289,7 +289,14 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
       ? tiet1Scores.reduce((a, b) => a + b, 0) / tiet1Scores.length 
       : 0;
     
-    const average = (cuoiKy * 3 + giuaKy * 3 + tiet1Avg * 2 + mieng15Avg) / 9;
+    // Use ThamSo weights if available, otherwise use default formula
+    const hesoMieng = Number(thamSo?.HesoMieng) || 1;
+    const hesoChinh15p = Number(thamSo?.HesoChinh15p) || 2;
+    const hesoGiuaky = Number(thamSo?.HesoGiuaky) || 3;
+    const hesoCuoiky = Number(thamSo?.HesoCuoiky) || 3;
+    const totalWeight = hesoMieng + hesoChinh15p + hesoGiuaky + hesoCuoiky;
+    
+    const average = (cuoiKy * hesoCuoiky + giuaKy * hesoGiuaky + tiet1Avg * hesoChinh15p + mieng15Avg * hesoMieng) / totalWeight;
     return Math.round(average * 10) / 10;
   };
 
@@ -436,6 +443,33 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
         `Còn ${missingGrades.length} học sinh chưa có đủ điểm giữa kỳ và cuối kỳ. Bạn có muốn tiếp tục lưu?`
       );
       if (!confirm) return;
+    }
+
+    // Validate điểm theo tham số (DiemToiThieu/DiemToiDa)
+    const minScore = Number(thamSo?.DiemToiThieu);
+    const maxScore = Number(thamSo?.DiemToiDa);
+    const hasScoreBounds = Number.isFinite(minScore) && Number.isFinite(maxScore);
+    if (hasScoreBounds) {
+      const outOfRange: Array<{ hs: string; field: string; value: number }> = [];
+      const checkVal = (val: number | null | undefined, hs: string, field: string) => {
+        if (typeof val === 'number' && (!Number.isFinite(val) || val < minScore || val > maxScore)) {
+          outOfRange.push({ hs, field, value: val });
+        }
+      };
+      for (const g of grades) {
+        // Giữa kỳ & Cuối kỳ
+        const gk = parseFloat(g.scores.giuaKy);
+        const ck = parseFloat(g.scores.cuoiKy);
+        checkVal(gk, g.HoTen, 'giữa kỳ');
+        checkVal(ck, g.HoTen, 'cuối kỳ');
+        // Miệng/15p & 1 tiết (danh sách)
+        for (const m of parseScores(g.scores.mieng15Phut)) checkVal(m, g.HoTen, 'miệng/15p');
+        for (const t of parseScores(g.scores.mot1Tiet)) checkVal(t, g.HoTen, '1 tiết');
+      }
+      if (outOfRange.length) {
+        alert(`Có ${outOfRange.length} điểm ngoài khoảng cho phép (${minScore}–${maxScore}). Vui lòng kiểm tra lại.`);
+        return;
+      }
     }
     
     try {
@@ -699,7 +733,7 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
         <ul className="text-blue-800 text-sm space-y-1 ml-4 list-disc">
           <li>Điểm Miệng/15 phút và 1 Tiết: Nhập nhiều điểm cách nhau bởi dấu phẩy (VD: 8, 7.5, 9)</li>
           <li>Điểm Giữa kỳ và Cuối kỳ: Nhập một điểm duy nhất (VD: 8.5)</li>
-          <li>Công thức tính ĐTB Môn: (Cuối kỳ × 3 + Giữa kỳ × 3 + ĐTB 1 Tiết × 2 + ĐTB Miệng/15' × 1) / 9</li>
+          <li>Công thức tính ĐTB Môn: (Cuối kỳ × {Number(thamSo?.HesoCuoiky) || 3} + Giữa kỳ × {Number(thamSo?.HesoGiuaky) || 3} + ĐTB 1 Tiết × {Number(thamSo?.HesoChinh15p) || 2} + ĐTB Miệng/15' × {Number(thamSo?.HesoMieng) || 1}) / {(Number(thamSo?.HesoCuoiky) || 3) + (Number(thamSo?.HesoGiuaky) || 3) + (Number(thamSo?.HesoChinh15p) || 2) + (Number(thamSo?.HesoMieng) || 1)}</li>
         </ul>
       </div>
 
@@ -844,7 +878,7 @@ export function GradeEntry({ teacherId }: { teacherId: number | null }) {
               <p className="text-gray-700 font-medium mb-2">Công thức tính ĐTB môn:</p>
               <p className="text-sm text-gray-600 mb-3">
                 <span className="font-mono bg-gray-100 px-2 py-1 rounded">
-                  (Cuối kỳ × 3 + Giữa kỳ × 3 + ĐTB 1 Tiết × 2 + ĐTB Miệng/15' × 1) / 9
+                  (Cuối kỳ × {Number(thamSo?.HesoCuoiky) || 3} + Giữa kỳ × {Number(thamSo?.HesoGiuaky) || 3} + ĐTB 1 Tiết × {Number(thamSo?.HesoChinh15p) || 2} + ĐTB Miệng/15' × {Number(thamSo?.HesoMieng) || 1}) / {(Number(thamSo?.HesoCuoiky) || 3) + (Number(thamSo?.HesoGiuaky) || 3) + (Number(thamSo?.HesoChinh15p) || 2) + (Number(thamSo?.HesoMieng) || 1)}
                 </span>
               </p>
               <p className="text-gray-700 font-medium mb-2">Công thức tính điểm tổng kết:</p>

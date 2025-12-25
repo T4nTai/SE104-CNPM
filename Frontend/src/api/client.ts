@@ -360,6 +360,10 @@ export const api = {
     return data.data || data;
   },
 
+  async deleteAcademicYear(MaNH: string | number): Promise<void> {
+    await apiClient.delete(`/admin/namhoc/${MaNH}`);
+  },
+
   // ========== Admin - Lop (Classes) ==========
   async createClass(payload: {
     TenLop: string;
@@ -410,6 +414,10 @@ export const api = {
   async getParameters(MaNH: string): Promise<any> {
     const { data } = await apiClient.get(`/admin/namhoc/${MaNH}/thamso`);
     return data.data || data;
+  },
+
+  async deleteParameters(MaNH: string): Promise<void> {
+    await apiClient.delete(`/admin/namhoc/${MaNH}/thamso`);
   },
 
   async getThamSo(MaNH: string): Promise<any> {
