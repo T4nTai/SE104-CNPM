@@ -546,6 +546,7 @@ export function RegulationManagement() {
                   <input
                     type="number"
                     required
+                    min="1900"
                     value={yearFormData.Nam1}
                     onChange={(e) => setYearFormData({ ...yearFormData, Nam1: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -557,6 +558,7 @@ export function RegulationManagement() {
                   <input
                     type="number"
                     required
+                    min="1900"
                     value={yearFormData.Nam2}
                     onChange={(e) => setYearFormData({ ...yearFormData, Nam2: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -653,7 +655,7 @@ export function RegulationManagement() {
                       onChange={(e) => setSubjectFormData({ ...subjectFormData, HeSoMon: parseFloat(e.target.value) })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       required
-                      min="1"
+                      min="0"
                       step="0.5"
                     />
                   </div>

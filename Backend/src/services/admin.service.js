@@ -83,6 +83,10 @@ function validateThamSo(data) {
     if (!isIntOrNull(data[k])) {
       throw { status: 400, message: `${k} phải là số nguyên (hoặc null)` };
     }
+    // Không cho phép số âm
+    if (data[k] != null && data[k] < 0) {
+      throw { status: 400, message: `${k} không được là số âm` };
+    }
   }
 
   // decimal check for grade weights (must be between 0 and 100)
@@ -232,12 +236,16 @@ export class AdminService {
   static async createMonHoc({ TenMonHoc, MaMon = null, HeSoMon, MoTa = null }) {
     if (!TenMonHoc) throw { status: 400, message: "TenMonHoc is required" };
     if (HeSoMon == null) throw { status: 400, message: "HeSoMon is required" };
+    if (HeSoMon < 0) throw { status: 400, message: "HeSoMon không được là số âm" };
     return await MonHoc.create({ TenMonHoc, MaMon, HeSoMon, MoTa });
   }
 
   static async updateMonHoc(MaMonHoc, payload) {
     const row = await MonHoc.findByPk(MaMonHoc);
     if (!row) throw { status: 404, message: "MonHoc not found" };
+    if (payload.HeSoMon != null && payload.HeSoMon < 0) {
+      throw { status: 400, message: "HeSoMon không được là số âm" };
+    }
     await row.update({
       TenMonHoc: payload.TenMonHoc ?? row.TenMonHoc,
       MaMon: payload.MaMon ?? row.MaMon,
@@ -458,6 +466,7 @@ export class AdminService {
   static async createLop({ TenLop, MaKhoiLop, MaNamHoc, SiSo = null }) {
     if (!TenLop) throw { status: 400, message: "TenLop is required" };
     if (MaKhoiLop == null || MaNamHoc == null) throw { status: 400, message: "MaKhoiLop & MaNamHoc are required" };
+    if (SiSo != null && SiSo < 0) throw { status: 400, message: "SiSo không được là số âm" };
     return await Lop.create({ TenLop, MaKhoiLop, MaNamHoc, SiSo });
   }
 
