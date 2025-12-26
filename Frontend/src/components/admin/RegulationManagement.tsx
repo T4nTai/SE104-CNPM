@@ -47,6 +47,7 @@ export function RegulationManagement() {
     MaNamHoc: '',
     SiSo: 0,
   });
+  const [maxStudentsByYear, setMaxStudentsByYear] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadAllData();
@@ -55,6 +56,12 @@ export function RegulationManagement() {
   const loadAllData = async () => {
     await Promise.all([loadAcademicYears(), loadSemesters(), loadSubjects(), loadGrades(), loadClasses()]);
   };
+
+  useEffect(() => {
+    if (classFormData.MaNamHoc) {
+      fetchMaxStudentsForYear(classFormData.MaNamHoc);
+    }
+  }, [classFormData.MaNamHoc]);
 
   const loadAcademicYears = async () => {
     try {
@@ -146,6 +153,19 @@ export function RegulationManagement() {
       setClasses(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('Failed to load classes:', err);
+    }
+  };
+
+  const fetchMaxStudentsForYear = async (MaNH: string | number) => {
+    try {
+      const resp = await api.getParameters(String(MaNH));
+      const max = typeof resp?.SiSoToiDa === 'number' && isFinite(resp.SiSoToiDa) ? resp.SiSoToiDa : undefined;
+      if (max) {
+        setMaxStudentsByYear((prev) => ({ ...prev, [String(MaNH)]: max }));
+      }
+    } catch (err) {
+      // If not configured yet, leave as undefined
+      console.warn('No parameters configured for year', MaNH, err);
     }
   };
 
@@ -340,6 +360,18 @@ export function RegulationManagement() {
         return;
       }
 
+      const maxStudents = maxStudentsByYear[String(classFormData.MaNamHoc)];
+      if (!maxStudents) {
+        setError('Vui lòng thiết lập tham số "Số học sinh tối đa/lớp" cho năm học này trong mục Thay đổi tham số.');
+        return;
+      }
+
+      const inputSiSo = Number.isFinite(classFormData.SiSo) && classFormData.SiSo > 0 ? classFormData.SiSo : maxStudents;
+      if (inputSiSo > maxStudents) {
+        setError(`Sĩ số vượt quá tối đa ${maxStudents} học sinh/lớp theo tham số năm học này.`);
+        return;
+      }
+
       // Check if grade has reached max classes
       const selectedGrade = grades.find(g => String(g.MaKL) === String(classFormData.MaKhoiLop));
       if (selectedGrade && selectedGrade.SoLop) {
@@ -357,7 +389,7 @@ export function RegulationManagement() {
         TenLop: classFormData.TenLop,
         MaKhoiLop: parseInt(classFormData.MaKhoiLop),
         MaNamHoc: parseInt(classFormData.MaNamHoc),
-        SiSo: classFormData.SiSo || undefined,
+        SiSo: inputSiSo,
       });
 
       setSuccess(true);
@@ -855,11 +887,19 @@ export function RegulationManagement() {
                     <input
                       type="number"
                       value={classFormData.SiSo}
-                      onChange={(e) => setClassFormData({ ...classFormData, SiSo: parseInt(e.target.value) })}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value, 10);
+                        setClassFormData({ ...classFormData, SiSo: Number.isNaN(value) ? 0 : value });
+                      }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       min="0"
                       placeholder="Để trống = tối đa theo tham số"
                     />
+                    {classFormData.MaNamHoc && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        Tối đa: {maxStudentsByYear[String(classFormData.MaNamHoc)] ?? 'Chưa cấu hình, hãy đặt ở "Thay đổi tham số"'} học sinh/lớp.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">

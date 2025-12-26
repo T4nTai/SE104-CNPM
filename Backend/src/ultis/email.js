@@ -196,7 +196,7 @@ export async function sendAccountCreationEmail({
   matKhau,
   userType = "student", // "student" | "teacher"
   tenTruong = "Trường Học",
-  websiteTruong = process.env.WEBSITE_URL || "",
+  websiteTruong = process.env.WEBSITE_URL || "https://se104.software/",
   emailHoTro = process.env.SUPPORT_EMAIL || "",
   soDienThoaiHoTro = process.env.SUPPORT_PHONE || "",
 }) {

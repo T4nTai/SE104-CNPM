@@ -8,6 +8,7 @@ interface ClassSearchProps {
 }
 
 export function ClassSearch({ userRole }: ClassSearchProps) {
+  const isStudent = userRole === 'student';
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [students, setStudents] = useState<StudentInClass[]>([]);
@@ -276,25 +277,47 @@ export function ClassSearch({ userRole }: ClassSearchProps) {
                       <th className="px-4 py-3 text-left text-gray-700">STT</th>
                       <th className="px-4 py-3 text-left text-gray-700">Họ và tên</th>
                       <th className="px-4 py-3 text-left text-gray-700">Giới tính</th>
-                      <th className="px-4 py-3 text-left text-gray-700">Năm sinh</th>
-                      <th className="px-4 py-3 text-left text-gray-700">Địa chỉ</th>
+                      {isStudent ? (
+                        <>
+                          <th className="px-4 py-3 text-left text-gray-700">Số điện thoại</th>
+                          <th className="px-4 py-3 text-left text-gray-700">Email</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="px-4 py-3 text-left text-gray-700">Năm sinh</th>
+                          <th className="px-4 py-3 text-left text-gray-700">Địa chỉ</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {loadingStudents ? (
-                      <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">Đang tải danh sách học sinh...</td></tr>
+                      <tr><td colSpan={isStudent ? 5 : 5} className="px-4 py-6 text-center text-gray-500">Đang tải danh sách học sinh...</td></tr>
                     ) : students.length > 0 ? (
-                      students.map((student, index) => (
-                        <tr key={(student as any).MaHocSinh || index} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-gray-600">{index + 1}</td>
-                          <td className="px-4 py-3 text-gray-900">{(student as any).HoTen || (student as any).TenHocSinh}</td>
-                          <td className="px-4 py-3 text-gray-600">{(student as any).GioiTinh || (student as any).gioiTinh || '-'}</td>
-                          <td className="px-4 py-3 text-gray-600">{(student as any).NgaySinh ? new Date((student as any).NgaySinh).getFullYear() : '-'}</td>
-                          <td className="px-4 py-3 text-gray-600">{(student as any).DiaChi || (student as any).address || '-'}</td>
-                        </tr>
-                      ))
+                      students.map((student, index) => {
+                        const phone = (student as any).SDT || (student as any).SoDienThoai || (student as any).soDienThoai || '';
+                        const email = (student as any).Email || (student as any).email || '';
+                        return (
+                          <tr key={(student as any).MaHocSinh || index} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-600">{index + 1}</td>
+                            <td className="px-4 py-3 text-gray-900">{(student as any).HoTen || (student as any).TenHocSinh}</td>
+                            <td className="px-4 py-3 text-gray-600">{(student as any).GioiTinh || (student as any).gioiTinh || '-'}</td>
+                            {isStudent ? (
+                              <>
+                                <td className="px-4 py-3 text-gray-600">{phone || '-'}</td>
+                                <td className="px-4 py-3 text-gray-600">{email || '-'}</td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-4 py-3 text-gray-600">{(student as any).NgaySinh ? new Date((student as any).NgaySinh).getFullYear() : '-'}</td>
+                                <td className="px-4 py-3 text-gray-600">{(student as any).DiaChi || (student as any).address || '-'}</td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })
                     ) : (
-                      <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">Không có học sinh</td></tr>
+                      <tr><td colSpan={isStudent ? 5 : 5} className="px-4 py-6 text-center text-gray-500">Không có học sinh</td></tr>
                     )}
                   </tbody>
                 </table>

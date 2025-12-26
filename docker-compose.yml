@@ -43,7 +43,7 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       NODEMAILER_USER: ${NODEMAILER_USER}
       NODEMAILER_PASSWORD: ${NODEMAILER_PASSWORD}
-      WEBSITE_URL: ${WEBSITE_URL:-http://localhost:3000}
+      WEBSITE_URL: ${WEBSITE_URL:-https://se104.software/}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@example.com}
       SUPPORT_PHONE: ${SUPPORT_PHONE:-123-456-7890}
     depends_on:
