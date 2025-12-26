@@ -62,10 +62,6 @@ export class ReportService {
     // tìm tất cả lớp của năm học
     const lops = await Lop.findAll({ where: { MaNamHoc } });
 
-    // đảm bảo bản ghi BAOCAOTKMON
-    let bc = await BaoCaoTKMon.findOne({ where: { MaMon, MaHocKy, MaNamHoc } });
-    if (!bc) bc = await BaoCaoTKMon.create({ MaMon, MaHocKy, MaNamHoc });
-
     // tính theo từng lớp: số lượng đạt môn trong HK
     const details = [];
     let totalStudentsAll = 0;
@@ -105,20 +101,12 @@ export class ReportService {
       totalPassedAll += soLuongDat;
       if (avg != null) { sumAvgAll += avg; countAvgAll += 1; }
       totalCat.XuatSac += cat.XuatSac; totalCat.Gioi += cat.Gioi; totalCat.TrungBinh += cat.TrungBinh; totalCat.Yeu += cat.Yeu;
-
-      const existed = await CTBaoCaoTKMon.findOne({ where: { MaBCTKMon: bc.MaBCTKMon, MaLop: lop.MaLop } });
-      if (!existed) {
-        await CTBaoCaoTKMon.create({ MaBCTKMon: bc.MaBCTKMon, MaLop: lop.MaLop, SoLuongDat: soLuongDat, TiLeDat: tiLeDat });
-      } else {
-        await existed.update({ SoLuongDat: soLuongDat, TiLeDat: tiLeDat });
-      }
     }
 
     const tongTiLeDat = totalStudentsAll > 0 ? Number(((totalPassedAll / totalStudentsAll) * 100).toFixed(2)) : 0;
     const tongDiemTB = countAvgAll > 0 ? Number((sumAvgAll / countAvgAll).toFixed(2)) : null;
 
     return {
-      MaBCTKMon: bc.MaBCTKMon,
       MaMon,
       MaHocKy,
       MaNamHoc,
