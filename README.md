@@ -78,5 +78,3 @@ docker compose up --build
 **Liên hệ / Người phát triển**
 - Nếu cần hỗ trợ thêm, cho mình biết mục bạn muốn mình triển khai (ví dụ: chạy demo bằng Docker, thêm hướng dẫn chi tiết biến môi trường, hay chuẩn hoá scripts). 
 
----
-Trạng thái hiện tại của README: mình đã thêm phần giới thiệu, công cụ, và hướng dẫn cơ bản để chạy dự án cả local lẫn Docker. Bạn muốn mình bổ sung chi tiết biến môi trường cụ thể từ `Backend/.env.example` không? 
