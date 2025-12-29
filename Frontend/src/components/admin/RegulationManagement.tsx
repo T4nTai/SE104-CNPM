@@ -181,10 +181,6 @@ export function RegulationManagement() {
         await api.updateSemester(String(editingSemesterId), semesterFormData);
         setEditingSemesterId(null);
       } else {
-        if (semesters.length >= 2) {
-          setError('Chỉ được phép có 2 học kỳ (Học kỳ I và Học kỳ II)');
-          return;
-        }
         await api.createSemester(semesterFormData);
       }
 
@@ -299,10 +295,6 @@ export function RegulationManagement() {
         await api.updateGrade(String(editingGradeId), gradeFormData);
         setEditingGradeId(null);
       } else {
-        if (grades.length >= 3) {
-          setError('Chỉ được phép có 3 khối lớp (10, 11, 12)');
-          return;
-        }
         await api.createGrade(gradeFormData);
       }
 
