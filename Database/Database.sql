@@ -252,6 +252,10 @@ CREATE TABLE thamso (
   DiemToiDa INT,
   DiemDatMon INT,
   DiemDat INT,
+  HesoMieng DECIMAL(5,2) DEFAULT 0.00,
+  HesoChinh15p DECIMAL(5,2) DEFAULT 0.00,
+  HesoGiuaky DECIMAL(5,2) DEFAULT 0.00,
+  HesoCuoiky DECIMAL(5,2) DEFAULT 0.00,
   MaNamHoc INT NOT NULL UNIQUE,
   CONSTRAINT fk_thamso_nh FOREIGN KEY (MaNamHoc)
     REFERENCES namhoc(MaNH)
