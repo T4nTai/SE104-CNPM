@@ -86,12 +86,18 @@ pipeline {
             }
             steps {
                 script {
-                    docker.withRegistry("https://${DOCKER_REGISTRY}", "${DOCKER_CREDENTIALS_ID}") {
-                        echo 'Pushing images to registry...'
-                        bat "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
-                        bat "docker push ${BACKEND_IMAGE}:latest"
-                        bat "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
-                        bat "docker push ${FRONTEND_IMAGE}:latest"
+                   docker.withRegistry("https://${DOCKER_REGISTRY}", "${DOCKER_CREDENTIALS_ID}") {
+                echo 'Pushing images using Plugin methods...'
+                
+                // Đẩy Backend
+                def backend = docker.image("${BACKEND_IMAGE}:${IMAGE_TAG}")
+                backend.push()
+                backend.push('latest')
+
+                // Đẩy Frontend
+                def frontend = docker.image("${FRONTEND_IMAGE}:${IMAGE_TAG}")
+                frontend.push()
+                frontend.push('latest')
                     }
                 }
             }
