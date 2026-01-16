@@ -4,8 +4,8 @@ pipeline {
     environment {
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_CREDENTIALS_ID = 'docker-hub-credentials'
-        BACKEND_IMAGE = 'nmcnpm-backend'
-        FRONTEND_IMAGE = 'nmcnpm-frontend'
+        BACKEND_IMAGE = 'taitai159/nmcnpm-backend'
+        FRONTEND_IMAGE = 'taitai159/nmcnpm-frontend'
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
     
