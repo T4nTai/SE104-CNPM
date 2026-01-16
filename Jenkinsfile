@@ -12,8 +12,18 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out code...'
-                checkout scm
+                echo 'Checking out code (explicit GitSCM)...'
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/T4nTai/SE104-CNPM.git',
+                        credentialsId: 'github-token-id'
+                    ]],
+                    extensions: [
+                        [$class: 'CloneOption', shallow: true, depth: 1, noTags: false, honorRefspec: true]
+                    ]
+                ])
             }
         }
         
@@ -156,7 +166,13 @@ TZ=Asia/Ho_Chi_Minh
         }
         always {
             echo 'Cleaning up workspace...'
-            cleanWs()
+            script {
+                try {
+                    cleanWs()
+                } catch (err) {
+                    echo "Skipping cleanWs: ${err.message}"
+                }
+            }
         }
     }
 }
