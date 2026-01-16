@@ -111,14 +111,38 @@ pipeline {
             }
         }
         
+        stage('Prepare Env File') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    echo 'Creating .env.ci for docker-compose...'
+                    def envContent = """
+MYSQL_ROOT_PASSWORD=${env.MYSQL_ROOT_PASSWORD ?: 'rootpass123!'}
+MYSQL_DATABASE=${env.MYSQL_DATABASE ?: 'se104'}
+JWT_SECRET=${env.JWT_SECRET ?: 'changeme-jwt'}
+JWT_EXPIRES_IN=${env.JWT_EXPIRES_IN ?: '1h'}
+NODEMAILER_USER=${env.NODEMAILER_USER ?: ''}
+NODEMAILER_PASSWORD=${env.NODEMAILER_PASSWORD ?: ''}
+WEBSITE_URL=${env.WEBSITE_URL ?: 'https://se104.software/'}
+SUPPORT_EMAIL=${env.SUPPORT_EMAIL ?: 'support@example.com'}
+SUPPORT_PHONE=${env.SUPPORT_PHONE ?: '123-456-7890'}
+TZ=Asia/Ho_Chi_Minh
+"""
+                    writeFile file: '.env.ci', text: envContent.trim() + "\n"
+                }
+            }
+        }
+        
         stage('Deploy') {
             when {
                 branch 'main'
             }
             steps {
                 echo 'Deploying application...'
-                bat 'docker-compose down || exit 0'
-                bat 'docker-compose up -d'
+                bat 'docker-compose --env-file .env.ci down || exit 0'
+                bat 'docker-compose --env-file .env.ci up -d'
             }
         }
     }

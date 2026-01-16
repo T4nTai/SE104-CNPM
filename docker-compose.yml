@@ -1,4 +1,4 @@
-version: "3.8"
+# Compose v2 ignores 'version'; remove to avoid warnings
 
 services:
   db:
@@ -6,8 +6,9 @@ services:
     container_name: se104-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      # Use CI-safe defaults if not provided via .env/Jenkins
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass123!}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-se104}
       TZ: Asia/Ho_Chi_Minh
     command: >
       --character-set-server=utf8mb4
@@ -15,11 +16,12 @@ services:
       --lower_case_table_names=1
     volumes:
       - db_data:/var/lib/mysql
-      - ./Backend/Database.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./Database/Database.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "127.0.0.1:3306:3306" # expose locally if you need to connect from host
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      # If a root password is set, use it; otherwise ping without -p
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot $${MYSQL_ROOT_PASSWORD:+-p$${MYSQL_ROOT_PASSWORD}} --silent"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -35,14 +37,14 @@ services:
       PORT: 3000
       DB_HOST: db
       DB_USER: root
-      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      DB_NAME: ${MYSQL_DATABASE}
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass123!}
+      DB_NAME: ${MYSQL_DATABASE:-se104}
       DB_PORT: 3306
       NODE_ENV: production
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:-changeme-jwt}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
-      NODEMAILER_USER: ${NODEMAILER_USER}
-      NODEMAILER_PASSWORD: ${NODEMAILER_PASSWORD}
+      NODEMAILER_USER: ${NODEMAILER_USER:-}
+      NODEMAILER_PASSWORD: ${NODEMAILER_PASSWORD:-}
       WEBSITE_URL: ${WEBSITE_URL:-https://se104.software/}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@example.com}
       SUPPORT_PHONE: ${SUPPORT_PHONE:-123-456-7890}
