@@ -80,26 +80,34 @@ pipeline {
             }
         }
         
-        stage('Push to Registry') {
+        stage('Docker Login') {
             when {
                 branch 'main'
             }
             steps {
                 script {
-                   docker.withRegistry("https://${DOCKER_REGISTRY}", "${DOCKER_CREDENTIALS_ID}") {
-                echo 'Pushing images using Plugin methods...'
-                
-                // Đẩy Backend
-                def backend = docker.image("${BACKEND_IMAGE}:${IMAGE_TAG}")
-                backend.push()
-                backend.push('latest')
-
-                // Đẩy Frontend
-                def frontend = docker.image("${FRONTEND_IMAGE}:${IMAGE_TAG}")
-                frontend.push()
-                frontend.push('latest')
+                    withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", 
+                                                     usernameVariable: 'DOCKER_USER', 
+                                                     passwordVariable: 'DOCKER_PASS')]) {
+                        echo 'Logging into Docker Hub...'
+                        bat "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin"
                     }
                 }
+            }
+        }
+        
+        stage('Push to Registry') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo 'Pushing backend images...'
+                bat "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
+                bat "docker push ${BACKEND_IMAGE}:latest"
+                
+                echo 'Pushing frontend images...'
+                bat "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
+                bat "docker push ${FRONTEND_IMAGE}:latest"
             }
         }
         
